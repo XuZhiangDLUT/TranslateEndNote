@@ -1,8 +1,8 @@
 # TranslateEndNote
 
-> 🚀 批量 **PDF→中英双语** 翻译与合成工具  
-> 以 [`PDFMathTranslate-next` 的 `pdf2zh` CLI](https://github.com/PDFMathTranslate/PDFMathTranslate-next) 为翻译引擎，
-> 在 **不破坏原版注释/链接** 的前提下，把**原文（左）+ 译文（右）**并排合成，覆盖输出为原文件名，并写入可溯源的元数据与附件。
+🚀 批量 **PDF→中英双语** 翻译与合成工具  
+- 以 [`PDFMathTranslate-next` 的 `pdf2zh` CLI](https://github.com/PDFMathTranslate/PDFMathTranslate-next) 为翻译引擎，
+- 在 **不破坏原版注释/链接** 的前提下，把**原文（左）+ 译文（右）**并排合成，覆盖输出为原文件名，并写入可溯源的元数据与附件。
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
