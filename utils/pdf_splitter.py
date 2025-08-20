@@ -33,7 +33,8 @@ OUTPUT_SUFFIX = "_restored"  # 输出文件名后缀
 # ========================================
 
 
-def is_url(path: str) -> bool:
+def is_valid_url(path: str) -> bool:
+    """检查字符串是否为有效的URL地址"""
     try:
         p = urlparse(path)
         return p.scheme in ("http", "https")
@@ -41,7 +42,7 @@ def is_url(path: str) -> bool:
         return False
 
 
-def download_to_temp(url: str) -> str:
+def download_url_to_temporary_file(url: str) -> str:
     """下载URL内容到临时文件，返回本地文件路径。"""
     r = requests.get(url, stream=True, timeout=60)
     r.raise_for_status()
@@ -61,11 +62,11 @@ def download_to_temp(url: str) -> str:
     return tmp_path
 
 
-def open_pdf(maybe_url_or_path: str):
-    """打开PDF文件，支持本地路径或URL。返回PDF文档对象和临时文件路径。"""
+def open_pdf_document(maybe_url_or_path: str):
+    """打开PDF文档，支持本地路径或URL。返回PDF文档对象和临时文件路径。"""
     tmp_file = None
-    if is_url(maybe_url_or_path):
-        tmp_file = download_to_temp(maybe_url_or_path)
+    if is_valid_url(maybe_url_or_path):
+        tmp_file = download_url_to_temporary_file(maybe_url_or_path)
         doc = fitz.open(tmp_file)
     else:
         doc = fitz.open(maybe_url_or_path)
@@ -77,7 +78,7 @@ def open_pdf(maybe_url_or_path: str):
     return doc, tmp_file
 
 
-def sanitize_filename(name: str) -> str:
+def sanitize_filename_for_windows(name: str) -> str:
     """清理文件名中的非法字符，确保Windows系统兼容性。"""
     # 去除控制字符并替换 <>:"/\|?* 为 _
     name = re.sub(r"[\x00-\x1f]", "", name)
@@ -87,15 +88,15 @@ def sanitize_filename(name: str) -> str:
     return name or "output"
 
 
-def source_based_output_name(source_path: str, suffix: str) -> str:
+def generate_output_filename_from_source(source_path: str, suffix: str) -> str:
     """基于源文件路径生成输出文件名。"""
-    if is_url(source_path):
+    if is_valid_url(source_path):
         path = urlparse(source_path).path
         base = os.path.basename(path) or "output.pdf"
     else:
         base = os.path.basename(source_path) or "output.pdf"
 
-    base = sanitize_filename(base)
+    base = sanitize_filename_for_windows(base)
     stem, ext = os.path.splitext(base)
     if not stem:
         stem = "output"
@@ -113,7 +114,7 @@ def _set_all_page_boxes(page: fitz.Page, rect: fitz.Rect):
                 pass
 
 
-def restore_left_pdf_from_merged(merged_pdf: str, out_path: str):
+def extract_left_half_from_merged_pdf(merged_pdf: str, out_path: str):
     """
     从横向拼接的PDF中恢复左侧内容，保留所有批注和链接。
     
@@ -158,6 +159,6 @@ def restore_left_pdf_from_merged(merged_pdf: str, out_path: str):
 
 
 if __name__ == "__main__":
-    output_name = source_based_output_name(MERGED_PDF, OUTPUT_SUFFIX)
+    output_name = generate_output_filename_from_source(MERGED_PDF, OUTPUT_SUFFIX)
     output_path = os.path.join(OUTPUT_DIR, output_name)
-    restore_left_pdf_from_merged(MERGED_PDF, output_path)
+    extract_left_half_from_merged_pdf(MERGED_PDF, output_path)

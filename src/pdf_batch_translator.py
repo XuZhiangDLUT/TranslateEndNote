@@ -30,9 +30,9 @@ from dataclasses import dataclass
 
 import sys
 
-# 导入中文PDF检测功能
+# 导入PDF语言检测功能
 try:
-    from determinePdfChinese import detect_pdf_language_via_vlm
+    from pdf_language_detector import detect_pdf_language_via_vlm
 
     _HAS_VLM_DETECT = True
 except ImportError:
@@ -45,8 +45,8 @@ except Exception:
 
 # ============ 配置文件加载 ============
 
-def load_config() -> Dict[str, Any]:
-    """加载配置文件"""
+def load_configuration() -> Dict[str, Any]:
+    """加载系统配置文件"""
     config_path = Path(__file__).parent.parent / "configs" / "config.json"
     if not config_path.exists():
         raise FileNotFoundError(f"配置文件不存在：{config_path}")
@@ -59,7 +59,7 @@ def load_config() -> Dict[str, Any]:
 
 
 # 加载配置
-CONFIG = load_config()
+CONFIG = load_configuration()
 
 # ========== 跳过规则配置 ==========
 SKIP_TRANSLATED_BY_METADATA = CONFIG["skip_translated_by_metadata"]
@@ -113,17 +113,18 @@ LOG_PATH = (LOG_DIR or PDF_ROOT) / "batch_translate_log.csv"
 CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 
-def contains_chinese(s: str) -> bool:
-    return bool(CJK_PATTERN.search(s))
+def contains_chinese_characters(text: str) -> bool:
+    """检查文本是否包含中文字符"""
+    return bool(CJK_PATTERN.search(text))
 
 
-def load_skip_keywords() -> List[str]:
-    """从配置文件加载跳过关键词列表"""
+def load_exclusion_keywords() -> List[str]:
+    """从配置文件加载排除关键词列表"""
     return CONFIG.get("skip_keywords", [])
 
 
-def contains_skip_keywords(filename: str, keywords: List[str]) -> bool:
-    """检查文件名是否包含跳过关键词"""
+def contains_exclusion_keywords(filename: str, keywords: List[str]) -> bool:
+    """检查文件名是否包含排除关键词"""
     if not keywords:
         return False
 
@@ -134,7 +135,7 @@ def contains_skip_keywords(filename: str, keywords: List[str]) -> bool:
     return False
 
 
-def check_pdf_metadata_status(pdf_path: Path) -> Tuple[bool, str]:
+def check_translation_metadata_status(pdf_path: Path) -> Tuple[bool, str]:
     """
     检查PDF内嵌元数据中的翻译状态
     返回: (是否已翻译, 检查结果说明)
@@ -175,9 +176,9 @@ def check_pdf_metadata_status(pdf_path: Path) -> Tuple[bool, str]:
         return False, f"metadata_check_failed:{e}"
 
 
-def is_chinese_pdf_via_vlm(pdf_path: Path) -> Tuple[bool, str]:
+def detect_chinese_content_via_vlm(pdf_path: Path) -> Tuple[bool, str]:
     """
-    使用大模型检测PDF是否为中文
+    使用视觉语言模型检测PDF是否为中文内容
     返回: (是否为中文PDF, 检测结果说明)
     """
     if not _HAS_VLM_DETECT:
@@ -208,10 +209,10 @@ def is_chinese_pdf_via_vlm(pdf_path: Path) -> Tuple[bool, str]:
         return False, f"vlm_detection_failed: {e}"
 
 
-def should_skip_file(pdf_path: Path, skip_keywords: List[str], failure_counts: dict) -> Tuple[bool, str]:
+def should_exclude_from_processing(pdf_path: Path, exclusion_keywords: List[str], failure_counts: dict) -> Tuple[bool, str]:
     """
-    检查是否应该跳过此PDF文件
-    返回: (是否跳过, 跳过原因)
+    检查是否应该排除此PDF文件不进行处理
+    返回: (是否排除, 排除原因)
     """
     stem = pdf_path.stem
     size = pdf_path.stat().st_size
@@ -231,20 +232,20 @@ def should_skip_file(pdf_path: Path, skip_keywords: List[str], failure_counts: d
 
     # 优先级最高：检查元数据中的翻译状态
     if SKIP_TRANSLATED_BY_METADATA:
-        is_translated, metadata_info = check_pdf_metadata_status(pdf_path)
+        is_translated, metadata_info = check_translation_metadata_status(pdf_path)
         if is_translated:
             return True, f"already_translated_by_metadata:{metadata_info}"
 
-    # 检查跳过关键词
-    if SKIP_CONTAINS_SKIP_KEYWORDS and contains_skip_keywords(pdf_path.name, skip_keywords):
-        return True, "contains_skip_keywords"
+    # 检查排除关键词
+    if SKIP_CONTAINS_SKIP_KEYWORDS and contains_exclusion_keywords(pdf_path.name, skip_keywords):
+        return True, "contains_exclusion_keywords"
 
     # 检查是否已存在备份
     if backup_path.exists():
         return True, "backup_exists"
 
     # 检查文件名是否包含中文
-    if SKIP_FILENAME_CONTAINS_CHINESE and contains_chinese(pdf_path.name):
+    if SKIP_FILENAME_CONTAINS_CHINESE and contains_chinese_characters(pdf_path.name):
         return True, "filename_contains_chinese"
 
     # 检查文件名格式
@@ -262,9 +263,9 @@ def should_skip_file(pdf_path: Path, skip_keywords: List[str], failure_counts: d
     if SKIP_MAX_FILE_SIZE and size >= MAX_SIZE_BYTES:
         return True, f"size_gt_{MAX_SIZE_BYTES}"
 
-    # 检查是否为中文PDF（使用大模型检测）- 放在最后，仅在其他规则都不跳过时才运行
+    # 检查是否为中文PDF（使用大模型检测）- 放在最后，仅在其他规则都不排除时才运行
     if SKIP_CHINESE_PDF_VLM:
-        is_chinese, detection_result = is_chinese_pdf_via_vlm(pdf_path)
+        is_chinese, detection_result = detect_chinese_content_via_vlm(pdf_path)
         if is_chinese:
             return True, f"chinese_pdf_vlm:{detection_result}"
 
@@ -272,7 +273,7 @@ def should_skip_file(pdf_path: Path, skip_keywords: List[str], failure_counts: d
 
 
 def is_normalized_name(stem: str) -> bool:
-    if contains_chinese(stem):
+    if contains_chinese_characters(stem):
         return False
     parts = stem.split("-")
     if len(parts) < 3:
@@ -410,11 +411,11 @@ def _build_cmd_base(input_pdf: Path, output_dir: Path, watermark_mode: str, enab
     return cmd
 
 
-def run_pdf2zh_mono_quiet(input_pdf: Path, output_dir: Path, enable_ocr: bool = False) -> Tuple[bool, str]:
+def execute_pdf2zh_translation(input_pdf: Path, output_dir: Path, enable_ocr: bool = False) -> Tuple[bool, str]:
     """
-    不打印 exe 的日志：stdout/stderr -> DEVNULL。
+    执行PDF翻译任务，静默模式运行不显示日志输出
     成功返回 (True, 'OK')；失败返回 (False, 'exit=<code>' 或异常说明)。
-    同时兼容 watermark 大小写差异。支持 enable_ocr=True 时附加 --ocr-workaround。
+    同时兼容水印参数大小写差异。支持 enable_ocr=True 时附加 --ocr-workaround。
     """
     pdf_to_process = input_pdf
     temp_input = None
@@ -498,8 +499,8 @@ def _set_all_page_boxes(page: fitz.Page, rect: fitz.Rect):
                 pass
 
 
-def get_page_sizes_pt(pdf_path: Path) -> List[Dict[str, float]]:
-    """获取PDF每页的尺寸（单位：pt）"""
+def extract_page_dimensions(pdf_path: Path) -> List[Dict[str, float]]:
+    """提取PDF每页的尺寸信息（单位：pt）"""
     try:
         import fitz
         with fitz.open(pdf_path) as doc:
@@ -513,10 +514,10 @@ def get_page_sizes_pt(pdf_path: Path) -> List[Dict[str, float]]:
         return []
 
 
-def create_metadata_json(status: str, source_sizes: List[Dict[str, float]],
-                         result_sizes: List[Dict[str, float]] = None,
-                         gap_pt: float = 0.0) -> Dict[str, Any]:
-    """创建元数据JSON"""
+def create_translation_metadata(status: str, source_sizes: List[Dict[str, float]],
+                                result_sizes: List[Dict[str, float]] = None,
+                                gap_pt: float = 0.0) -> Dict[str, Any]:
+    """创建翻译元数据JSON"""
     metadata = {
         "pdf2zh.status": status,
         "pdf2zh.run_time_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -537,13 +538,13 @@ def create_metadata_json(status: str, source_sizes: List[Dict[str, float]],
     return metadata
 
 
-def add_metadata_to_original_pdf(pdf_path: Path):
-    """为原始PDF添加最小元数据（仅包含运行时间和状态）"""
+def embed_minimal_metadata(pdf_path: Path):
+    """为原始PDF嵌入最小元数据（仅包含运行时间和状态）"""
     try:
         import fitz
 
         # 创建最小元数据（仅状态和时间）
-        metadata = create_metadata_json("untranslated", [])  # source_sizes为空数组
+        metadata = create_translation_metadata("untranslated", [])  # source_sizes为空数组
 
         with fitz.open(pdf_path) as doc:
             # 添加元数据JSON附件
@@ -566,8 +567,8 @@ def add_metadata_to_original_pdf(pdf_path: Path):
         return False, str(e)
 
 
-def add_attachments_and_annotation(pdf_path: Path, original_pdf: Path, metadata: Dict[str, Any]):
-    """为PDF添加附件和点击标签"""
+def embed_original_file_attachment(pdf_path: Path, original_pdf: Path, metadata: Dict[str, Any]):
+    """为PDF嵌入原始文件附件和可点击标签"""
     try:
         import fitz
 
@@ -651,8 +652,8 @@ def _retry_unlink(path: Path, max_retries=5, initial_delay=0.05):
     return False
 
 
-def merge_preserve_left_annotations_and_overwrite(pdf_left: Path, pdf_right: Path, overwrite_path: Path,
-                                                  gap: float = 0.0):
+def merge_pdfs_preserve_annotations(pdf_left: Path, pdf_right: Path, output_path: Path,
+                                        gap: float = 0.0):
     left_doc = fitz.open(pdf_left)
     right_doc = fitz.open(pdf_right)
     out = fitz.open()
@@ -707,16 +708,16 @@ def merge_preserve_left_annotations_and_overwrite(pdf_left: Path, pdf_right: Pat
 
 # =========================================================
 
-def expected_mono_path(src_pdf: Path) -> Path:
+def get_expected_mono_output_path(src_pdf: Path) -> Path:
     # Paper.pdf -> Paper.no_watermark.zh-CN.mono.pdf
     return src_pdf.parent / f"{src_pdf.stem}.no_watermark.{LANG_OUT}.mono.pdf"
 
 
-def find_best_match(glob_pattern: str) -> Optional[Path]:
-    cands = sorted(Path(glob_pattern).parent.glob(Path(glob_pattern).name),
-                   key=lambda p: p.stat().st_mtime if p.exists() else 0,
-                   reverse=True)
-    return cands[0] if cands else None
+def find_most_recent_matching_file(glob_pattern: str) -> Optional[Path]:
+    candidates = sorted(Path(glob_pattern).parent.glob(Path(glob_pattern).name),
+                       key=lambda p: p.stat().st_mtime if p.exists() else 0,
+                       reverse=True)
+    return candidates[0] if candidates else None
 
 
 def main():
@@ -724,10 +725,10 @@ def main():
         raise FileNotFoundError(f"找不到可执行文件：{PDF2ZH_EXE}")
 
     failure_counts = read_failure_counts(FAIL_LOG_PATH)
-    skip_keywords = load_skip_keywords()  # 加载跳过关键词
+    skip_keywords = load_exclusion_keywords()  # 加载排除关键词
 
     if skip_keywords:
-        print(f"已加载 {len(skip_keywords)} 个跳过关键词：{', '.join(skip_keywords)}", flush=True)
+        print(f"已加载 {len(skip_keywords)} 个排除关键词：{', '.join(skip_keywords)}", flush=True)
 
     pdf_files = []
     for root, _, files in os.walk(PDF_ROOT):
@@ -744,61 +745,61 @@ def main():
         stem = pdf_path.stem
         size = pdf_path.stat().st_size
 
-        # 使用新的统一跳过检查函数
-        should_skip, skip_reason = should_skip_file(pdf_path, skip_keywords, failure_counts)
-        if should_skip:
+        # 使用新的统一排除检查函数
+        should_exclude, exclude_reason = should_exclude_from_processing(pdf_path, skip_keywords, failure_counts)
+        if should_exclude:
             skipped += 1
             # 获取页数信息用于日志记录
-            pages = get_page_count(pdf_path) if skip_reason.startswith("pages_gt_") else None
-            log_row("skipped", pdf_path, reason=skip_reason, size=size, pages=pages)
+            pages = get_page_count(pdf_path) if exclude_reason.startswith("pages_gt_") else None
+            log_row("skipped", pdf_path, reason=exclude_reason, size=size, pages=pages)
 
             if not SUPPRESS_SKIPPED_OUTPUT:
                 print(f"\n[{idx}/{total_files}] 处理：{pdf_path.name}", flush=True)
-                if skip_reason == "too_many_failures":
-                    print(f"  跳过：该文件已累计失败 {failure_counts.get(str(pdf_path), 0)} 次，不再尝试。", flush=True)
-                elif skip_reason == "is_backup_original":
-                    print("  跳过：备份文件 *_original.pdf", flush=True)
-                elif skip_reason == "is_generated_output":
-                    print("  跳过：已生成的 mono/dual 文件", flush=True)
-                elif skip_reason.startswith("already_translated_by_metadata:"):
-                    print("  跳过：元数据显示已翻译", flush=True)
-                elif skip_reason == "contains_skip_keywords":
-                    print("  跳过：文件名包含跳过关键词", flush=True)
-                elif skip_reason == "backup_exists":
-                    print("  跳过：已存在 *_original 备份", flush=True)
-                elif skip_reason == "filename_contains_chinese":
-                    print("  跳过：文件名包含中文", flush=True)
-                elif skip_reason == "bad_name_pattern":
-                    print("  跳过：文件名不符合 Author-YYYY-Title 规范", flush=True)
-                elif skip_reason == "page_count_failed":
-                    print("  跳过：无法读取页数", flush=True)
-                elif skip_reason.startswith("pages_gt_"):
-                    print(f"  跳过：页数 {pages} 超过 {MAX_PAGES}", flush=True)
-                elif skip_reason.startswith("size_gt_"):
-                    print("  跳过：大小超过阈值", flush=True)
-                elif skip_reason.startswith("chinese_pdf_vlm:"):
-                    print("  跳过：大模型检测为中文PDF", flush=True)
+                if exclude_reason == "too_many_failures":
+                    print(f"  排除：该文件已累计失败 {failure_counts.get(str(pdf_path), 0)} 次，不再尝试。", flush=True)
+                elif exclude_reason == "is_backup_original":
+                    print("  排除：备份文件 *_original.pdf", flush=True)
+                elif exclude_reason == "is_generated_output":
+                    print("  排除：已生成的 mono/dual 文件", flush=True)
+                elif exclude_reason.startswith("already_translated_by_metadata:"):
+                    print("  排除：元数据显示已翻译", flush=True)
+                elif exclude_reason == "contains_exclusion_keywords":
+                    print("  排除：文件名包含排除关键词", flush=True)
+                elif exclude_reason == "backup_exists":
+                    print("  排除：已存在 *_original 备份", flush=True)
+                elif exclude_reason == "filename_contains_chinese":
+                    print("  排除：文件名包含中文", flush=True)
+                elif exclude_reason == "bad_name_pattern":
+                    print("  排除：文件名不符合 Author-YYYY-Title 规范", flush=True)
+                elif exclude_reason == "page_count_failed":
+                    print("  排除：无法读取页数", flush=True)
+                elif exclude_reason.startswith("pages_gt_"):
+                    print(f"  排除：页数 {pages} 超过 {MAX_PAGES}", flush=True)
+                elif exclude_reason.startswith("size_gt_"):
+                    print("  排除：大小超过阈值", flush=True)
+                elif exclude_reason.startswith("chinese_pdf_vlm:"):
+                    print("  排除：大模型检测为中文PDF", flush=True)
             continue
 
         # 只有在确定不跳过时才显示处理信息
         print(f"\n[{idx}/{total_files}] 处理：{pdf_path.name}", flush=True)
 
         backup_path = pdf_path.with_name(f"{stem}_original.pdf")
-        mono_path = expected_mono_path(pdf_path)
+        mono_path = get_expected_mono_output_path(pdf_path)
         final_path = pdf_path  # 覆盖回原名
         pages = get_page_count(pdf_path)  # 重新获取页数信息
 
         # —— 调用 pdf2zh：仅产中文 mono；不提取 exe 日志 ——
         used_ocr = False
         t0 = time.time()
-        ok, reason = run_pdf2zh_mono_quiet(pdf_path, pdf_path.parent, enable_ocr=False)
+        ok, reason = execute_pdf2zh_translation(pdf_path, pdf_path.parent, enable_ocr=False)
         duration = time.time() - t0
         if not ok:
             # 首次失败：尝试启用 OCR 回退
             print(f"  首次翻译失败（{reason}），尝试启用 OCR 回退……", flush=True)
             cleanup_new_csvs(pdf_path.parent, t0)
             t1 = time.time()
-            ok, reason = run_pdf2zh_mono_quiet(pdf_path, pdf_path.parent, enable_ocr=True)
+            ok, reason = execute_pdf2zh_translation(pdf_path, pdf_path.parent, enable_ocr=True)
             duration = time.time() - t1
             if not ok:
                 increment_and_write_failure(pdf_path, failure_counts, FAIL_LOG_PATH)
@@ -812,7 +813,7 @@ def main():
 
         # —— 找到 mono 输出 ——
         if not mono_path.exists():
-            fallback = find_best_match(str(pdf_path.parent / f"{stem}*mono.pdf"))
+            fallback = find_most_recent_matching_file(str(pdf_path.parent / f"{stem}*mono.pdf"))
             if fallback:
                 mono_path = fallback
             else:
@@ -820,7 +821,7 @@ def main():
                 if not used_ocr:
                     print("  未找到 mono 输出，尝试启用 OCR 回退再生成……", flush=True)
                     t2 = time.time()
-                    ok2, reason2 = run_pdf2zh_mono_quiet(pdf_path, pdf_path.parent, enable_ocr=True)
+                    ok2, reason2 = execute_pdf2zh_translation(pdf_path, pdf_path.parent, enable_ocr=True)
                     cleanup_new_csvs(pdf_path.parent, t2)
                     if not ok2:
                         increment_and_write_failure(pdf_path, failure_counts, FAIL_LOG_PATH)
@@ -831,7 +832,7 @@ def main():
                         continue
                     # 再次定位 mono
                     if not mono_path.exists():
-                        fb2 = find_best_match(str(pdf_path.parent / f"{stem}*mono.pdf"))
+                        fb2 = find_most_recent_matching_file(str(pdf_path.parent / f"{stem}*mono.pdf"))
                         if fb2:
                             mono_path = fb2
                         else:
@@ -853,7 +854,7 @@ def main():
             shutil.copy2(pdf_path, backup_path)
 
             # 为原始PDF备份添加最小元数据
-            original_meta_ok, original_meta_error = add_metadata_to_original_pdf(backup_path)
+            original_meta_ok, original_meta_error = embed_minimal_metadata(backup_path)
             if not original_meta_ok:
                 print(f"  警告：为原始PDF添加元数据失败：{original_meta_error}", flush=True)
                 # 记录元数据失败到日志
@@ -871,24 +872,24 @@ def main():
         # —— 合并并覆盖原名 ——
         try:
             # 获取原始PDF页面尺寸
-            source_sizes = get_page_sizes_pt(pdf_path)
+            source_sizes = extract_page_dimensions(pdf_path)
             if not source_sizes:
                 print(f"  警告：无法获取原始PDF页面尺寸", flush=True)
                 source_sizes = []
 
-            merge_preserve_left_annotations_and_overwrite(pdf_path, mono_path, final_path, gap=GAP)
+            merge_pdfs_preserve_annotations(pdf_path, mono_path, final_path, gap=GAP)
 
             # 获取合并后PDF页面尺寸
-            result_sizes = get_page_sizes_pt(final_path)
+            result_sizes = extract_page_dimensions(final_path)
             if not result_sizes:
                 print(f"  警告：无法获取合并后PDF页面尺寸", flush=True)
                 result_sizes = []
 
             # 创建元数据
-            metadata = create_metadata_json("translated", source_sizes, result_sizes, GAP)
+            metadata = create_translation_metadata("translated", source_sizes, result_sizes, GAP)
 
             # 添加附件和点击标签
-            attach_ok, attach_error = add_attachments_and_annotation(final_path, backup_path, metadata)
+            attach_ok, attach_error = embed_original_file_attachment(final_path, backup_path, metadata)
             if not attach_ok:
                 print(f"  警告：添加附件失败：{attach_error}", flush=True)
                 # 记录附件失败到日志

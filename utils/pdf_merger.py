@@ -34,7 +34,8 @@ GAP = 0                                  # 中缝间距（点），设为0时宽
 # ========================================
 
 
-def is_url(path: str) -> bool:
+def is_valid_url(path: str) -> bool:
+    """检查字符串是否为有效的URL地址"""
     try:
         p = urlparse(path)
         return p.scheme in ("http", "https")
@@ -42,7 +43,7 @@ def is_url(path: str) -> bool:
         return False
 
 
-def download_to_temp(url: str) -> str:
+def download_url_to_temporary_file(url: str) -> str:
     """下载URL内容到临时文件，返回本地文件路径。"""
     r = requests.get(url, stream=True, timeout=60)
     r.raise_for_status()
@@ -62,11 +63,11 @@ def download_to_temp(url: str) -> str:
     return tmp_path
 
 
-def open_pdf(maybe_url_or_path: str):
-    """打开PDF文件，支持本地路径或URL。返回PDF文档对象和临时文件路径。"""
+def open_pdf_document(maybe_url_or_path: str):
+    """打开PDF文档，支持本地路径或URL。返回PDF文档对象和临时文件路径。"""
     tmp_file = None
-    if is_url(maybe_url_or_path):
-        tmp_file = download_to_temp(maybe_url_or_path)
+    if is_valid_url(maybe_url_or_path):
+        tmp_file = download_url_to_temporary_file(maybe_url_or_path)
         doc = fitz.open(tmp_file)
     else:
         doc = fitz.open(maybe_url_or_path)
@@ -78,7 +79,7 @@ def open_pdf(maybe_url_or_path: str):
     return doc, tmp_file
 
 
-def sanitize_filename(name: str) -> str:
+def sanitize_filename_for_windows(name: str) -> str:
     """清理文件名中的非法字符，确保Windows系统兼容性。"""
     # 去除控制字符并替换 <>:"/\|?* 为 _
     name = re.sub(r"[\x00-\x1f]", "", name)
@@ -88,15 +89,15 @@ def sanitize_filename(name: str) -> str:
     return name or "output"
 
 
-def left_based_output_name(left_src: str, suffix: str) -> str:
+def generate_output_filename_from_source(left_src: str, suffix: str) -> str:
     """基于左侧PDF源文件路径生成输出文件名。"""
-    if is_url(left_src):
+    if is_valid_url(left_src):
         path = urlparse(left_src).path
         base = os.path.basename(path) or "output.pdf"
     else:
         base = os.path.basename(left_src) or "output.pdf"
 
-    base = sanitize_filename(base)
+    base = sanitize_filename_for_windows(base)
     stem, ext = os.path.splitext(base)
     if not stem:
         stem = "output"
@@ -114,9 +115,10 @@ def _set_all_page_boxes(page: fitz.Page, rect: fitz.Rect):
                 pass
 
 
-def merge_preserve_left_annotations(pdf_left: str, pdf_right: str, out_path: str, gap: float = 0):
-    left_doc, left_tmp = open_pdf(pdf_left)
-    right_doc, right_tmp = open_pdf(pdf_right)
+def merge_pdfs_with_annotations_preserved(pdf_left: str, pdf_right: str, out_path: str, gap: float = 0):
+    """横向合并两个PDF，保留左侧PDF的所有批注和链接"""
+    left_doc, left_tmp = open_pdf_document(pdf_left)
+    right_doc, right_tmp = open_pdf_document(pdf_right)
 
     try:
         if len(left_doc) != len(right_doc):
@@ -164,6 +166,6 @@ def merge_preserve_left_annotations(pdf_left: str, pdf_right: str, out_path: str
 
 
 if __name__ == "__main__":
-    output_name = left_based_output_name(LEFT_PDF, OUTPUT_SUFFIX)
+    output_name = generate_output_filename_from_source(LEFT_PDF, OUTPUT_SUFFIX)
     output_path = os.path.join(OUTPUT_DIR, output_name)
-    merge_preserve_left_annotations(LEFT_PDF, RIGHT_PDF, output_path, gap=GAP)
+    merge_pdfs_with_annotations_preserved(LEFT_PDF, RIGHT_PDF, output_path, gap=GAP)

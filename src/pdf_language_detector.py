@@ -39,7 +39,7 @@ except ImportError:
 
 
 # ======== 配置管理 ========
-def load_config() -> Dict[str, Any]:
+def load_configuration() -> Dict[str, Any]:
     """从配置文件加载设置参数"""
     config_path = Path(__file__).parent.parent / "configs" / "config.json"
     if not config_path.exists():
@@ -52,7 +52,7 @@ def load_config() -> Dict[str, Any]:
         raise RuntimeError(f"读取配置文件失败：{e}")
 
 # ======== 配置参数 ========
-CONFIG = load_config()
+CONFIG = load_configuration()
 
 # VLM API配置 - 优先从环境变量读取
 SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", CONFIG["vlm_api_key"])
@@ -80,8 +80,9 @@ PROMPT_CN = (
 )
 
 
-def _render_page_to_jpeg_base64(doc: fitz.Document, page_index: int,
+def render_page_to_jpeg_base64(doc: fitz.Document, page_index: int,
                                 dpi: int = 150, jpeg_quality: int = 85) -> str:
+    """将PDF页面渲染为JPEG格式的Base64编码"""
     page = doc.load_page(page_index)
     zoom = dpi / 72.0
     mat = fitz.Matrix(zoom, zoom)
@@ -93,7 +94,8 @@ def _render_page_to_jpeg_base64(doc: fitz.Document, page_index: int,
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
-def _build_vlm_message(image_b64: str, detail: str = "low") -> List[Dict[str, Any]]:
+def build_vlm_request_message(image_b64: str, detail: str = "low") -> List[Dict[str, Any]]:
+    """构建VLM请求消息结构"""
     """
     统一构造 VLM 输入消息（图片 + 文本）。
     支持 detail: low/high/auto（见官方说明）。:contentReference[oaicite:4]{index=4}
@@ -110,12 +112,13 @@ def _build_vlm_message(image_b64: str, detail: str = "low") -> List[Dict[str, An
     ]
 
 
-def _post_vlm_openai_sdk(image_b64: str,
-                         api_key: str,
-                         base_url: str,
-                         model: str,
-                         detail: str = "low",
-                         timeout: int = 60) -> str:
+def call_vlm_via_openai_sdk(image_b64: str,
+                          api_key: str,
+                          base_url: str,
+                          model: str,
+                          detail: str = "low",
+                          timeout: int = 60) -> str:
+    """通过OpenAI SDK调用VLM服务"""
     client = OpenAI(api_key=api_key, base_url=base_url)
     
     # GLM-4.1V-9B-Thinking 需要特殊参数和更长的输出
@@ -126,7 +129,7 @@ def _post_vlm_openai_sdk(image_b64: str,
             max_tokens=512,
             messages=[
                 {"role": "system", "content": SYSTEM_BRIEF},
-                {"role": "user", "content": _build_vlm_message(image_b64, detail=detail)},
+                {"role": "user", "content": build_vlm_request_message(image_b64, detail=detail)},
             ],
         )
     else:
@@ -136,19 +139,20 @@ def _post_vlm_openai_sdk(image_b64: str,
             max_tokens=16,
             messages=[
                 {"role": "system", "content": SYSTEM_BRIEF},
-                {"role": "user", "content": _build_vlm_message(image_b64, detail=detail)},
+                {"role": "user", "content": build_vlm_request_message(image_b64, detail=detail)},
             ],
             timeout=timeout,
         )
     return (resp.choices[0].message.content or "").strip()
 
 
-def _post_vlm_requests(image_b64: str,
-                       api_key: str,
-                       base_url: str,
-                       model: str,
-                       detail: str = "low",
-                       timeout: int = 60) -> str:
+def call_vlm_via_http_requests(image_b64: str,
+                             api_key: str,
+                             base_url: str,
+                             model: str,
+                             detail: str = "low",
+                             timeout: int = 60) -> str:
+    """通过HTTP请求调用VLM服务"""
     url = f"{base_url.rstrip('/')}/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -163,7 +167,7 @@ def _post_vlm_requests(image_b64: str,
             "max_tokens": 512,
             "messages": [
                 {"role": "system", "content": SYSTEM_BRIEF},
-                {"role": "user", "content": _build_vlm_message(image_b64, detail=detail)},
+                {"role": "user", "content": build_vlm_request_message(image_b64, detail=detail)},
             ],
         }
     else:
@@ -173,7 +177,7 @@ def _post_vlm_requests(image_b64: str,
             "max_tokens": 16,
             "messages": [
                 {"role": "system", "content": SYSTEM_BRIEF},
-                {"role": "user", "content": _build_vlm_message(image_b64, detail=detail)},
+                {"role": "user", "content": build_vlm_request_message(image_b64, detail=detail)},
             ],
         }
     
@@ -183,7 +187,8 @@ def _post_vlm_requests(image_b64: str,
     return (j["choices"][0]["message"]["content"] or "").strip()
 
 
-def _normalize_label(text: str) -> str:
+def normalize_language_label(text: str) -> str:
+    """标准化语言标签"""
     t = (text or "").strip()
     tl = t.lower()
     # 先看明确词
@@ -219,7 +224,7 @@ def detect_pdf_language_via_vlm(pdf_path: str,
     if detail not in ("low", "high", "auto"):
         raise ValueError("detail 必须为 'low' / 'high' / 'auto'")
 
-    call_vlm = (_post_vlm_openai_sdk if _HAS_OPENAI_SDK else _post_vlm_requests)
+    call_vlm = (call_vlm_via_openai_sdk if _HAS_OPENAI_SDK else call_vlm_via_http_requests)
 
     with fitz.open(pdf_path) as doc:
         n = doc.page_count
@@ -242,12 +247,12 @@ def detect_pdf_language_via_vlm(pdf_path: str,
         count_nonzh = 0
 
         for idx in indices:
-            b64 = _render_page_to_jpeg_base64(doc, idx, dpi=dpi, jpeg_quality=85)
+            b64 = render_page_to_jpeg_base64(doc, idx, dpi=dpi, jpeg_quality=85)
             raw = call_vlm(
                 b64, api_key=api_key, base_url=base_url,
                 model=model, detail=detail, timeout=per_page_timeout
             )
-            label = _normalize_label(raw)
+            label = normalize_language_label(raw)
             (count_zh if label == "中文" else count_nonzh)  # no-op to avoid linter warnings
             if label == "中文":
                 count_zh += 1
