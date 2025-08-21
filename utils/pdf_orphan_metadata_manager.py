@@ -54,6 +54,10 @@ try:
 except ImportError:
     _HAS_VLM_DETECT = False
 
+# 导入中文字符检测
+import re
+CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+
 # ======== 配置管理 ========
 def load_configuration() -> Dict[str, Any]:
     """从配置文件加载设置参数"""
@@ -105,6 +109,26 @@ VLM_K_PAGES = CONFIG["vlm_k_pages"]
 VLM_DPI = CONFIG["vlm_dpi"]
 VLM_DETAIL = CONFIG["vlm_detail"]
 VLM_PER_PAGE_TIMEOUT = CONFIG["vlm_per_page_timeout"]
+
+# ========== 跳过规则配置 (硬编码) ==========
+SKIP_FILENAME_CONTAINS_CHINESE = True      # 跳过文件名含中文的PDF
+SKIP_FILENAME_FORMAT_CHECK = True         # 跳过不符合作者-年份-标题格式的PDF
+SKIP_MAX_FILE_SIZE = True                # 跳过超过最大文件大小的PDF
+SKIP_MAX_PAGES = True                     # 跳过超过最大页数的PDF
+SKIP_CONTAINS_SKIP_KEYWORDS = True        # 跳过包含跳过关键词的PDF
+
+# ========== 处理参数配置 (硬编码) ==========
+MAX_SIZE_BYTES = 104857600                # 最大文件大小（100MB）
+MAX_PAGES = 500                          # 最大页数
+
+# ========== 排除关键词 (硬编码) ==========
+SKIP_KEYWORDS = [
+    "clear",
+    "clean", 
+    "supplement",
+    "pdf2zh-updated",
+    "pdf2zh-merged"
+]
 
 # ======== 工具函数 ========
 
@@ -279,6 +303,45 @@ def detect_translation_status_via_vlm(pdf_path: str,
     except Exception as e:
         return False, f"detection_failed: {e}"
 
+def contains_chinese_characters(text: str) -> bool:
+    """检查文本是否包含中文字符"""
+    return bool(CJK_PATTERN.search(text))
+
+
+def is_normalized_name(stem: str) -> bool:
+    """检查文件名是否符合 Author-YYYY-Title 格式"""
+    if contains_chinese_characters(stem):
+        return False
+    parts = stem.split("-")
+    if len(parts) < 3:
+        return False
+    author, year, title_rest = parts[0], parts[1], "-".join(parts[2:])
+    if not (year.isdigit() and 1900 <= int(year) <= 2099 and len(year) == 4):
+        return False
+    if any(ch.isdigit() for ch in author):
+        return False
+    if not any(ch.isalpha() for ch in author):
+        return False
+    if not any(ch.isalpha() for ch in title_rest):
+        return False
+    return True
+
+
+def get_page_count(pdf_path: Path) -> Optional[int]:
+    """获取PDF页数"""
+    try:
+        with fitz.open(pdf_path) as doc:
+            return doc.page_count
+    except Exception:
+        try:
+            from PyPDF2 import PdfReader
+            with open(pdf_path, "rb") as f:
+                reader = PdfReader(f)
+                return len(reader.pages)
+        except Exception:
+            return None
+
+
 def should_process_pdf(pdf_path: Path, exclusion_keywords: List[str] = None) -> Tuple[bool, str]:
     """
     检查是否应该处理此PDF文件
@@ -286,6 +349,9 @@ def should_process_pdf(pdf_path: Path, exclusion_keywords: List[str] = None) -> 
     """
     if exclusion_keywords is None:
         exclusion_keywords = []
+    
+    stem = pdf_path.stem
+    size = pdf_path.stat().st_size
     
     # 规则1：检查是否已有元数据
     if has_metadata_attachment(pdf_path):
@@ -304,8 +370,27 @@ def should_process_pdf(pdf_path: Path, exclusion_keywords: List[str] = None) -> 
     if original_path.exists():
         return False, "has_original_pair"
     
-    # 规则5：检查文件名是否包含排除关键词
-    if exclusion_keywords:
+    # 规则5：检查文件名是否包含中文
+    if SKIP_FILENAME_CONTAINS_CHINESE and contains_chinese_characters(pdf_path.name):
+        return False, "filename_contains_chinese"
+    
+    # 规则6：检查文件名格式
+    if SKIP_FILENAME_FORMAT_CHECK and not is_normalized_name(stem):
+        return False, "bad_name_pattern"
+    
+    # 规则7：检查页数
+    pages = get_page_count(pdf_path)
+    if pages is None:
+        return False, "page_count_failed"
+    if SKIP_MAX_PAGES and pages > MAX_PAGES:
+        return False, f"pages_gt_{MAX_PAGES}"
+    
+    # 规则8：检查文件大小
+    if SKIP_MAX_FILE_SIZE and size >= MAX_SIZE_BYTES:
+        return False, f"size_gt_{MAX_SIZE_BYTES}"
+    
+    # 规则9：检查排除关键词
+    if SKIP_CONTAINS_SKIP_KEYWORDS and exclusion_keywords:
         filename_lower = pdf_path.name.lower()
         for keyword in exclusion_keywords:
             if keyword in filename_lower:
@@ -371,12 +456,9 @@ def scan_and_process_pdfs(root_dir: Path, model: str = DEFAULT_MODEL,
         "failed": 0
     }
     
-    # 加载排除关键词
-    exclusion_keywords = CONFIG.get("skip_keywords", [])
-    
     print(f"扫描目录：{root_dir}")
-    if exclusion_keywords:
-        print(f"排除关键词：{', '.join(exclusion_keywords)}")
+    if SKIP_KEYWORDS:
+        print(f"排除关键词：{', '.join(SKIP_KEYWORDS)}")
     
     # 收集所有PDF文件
     pdf_files = []
@@ -390,7 +472,7 @@ def scan_and_process_pdfs(root_dir: Path, model: str = DEFAULT_MODEL,
     
     # 处理每个PDF文件
     for pdf_path in pdf_files:
-        should_process, reason = should_process_pdf(pdf_path, exclusion_keywords)
+        should_process, reason = should_process_pdf(pdf_path, SKIP_KEYWORDS)
         
         if not should_process:
             stats["skipped"] += 1

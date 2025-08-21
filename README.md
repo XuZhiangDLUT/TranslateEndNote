@@ -341,13 +341,31 @@ python utils/pdf_splitter.py
 
 ### 📄 `pdf_orphan_metadata_manager.py`
 
-**用途**：孤儿元数据管理工具，处理缺少对应PDF的元数据
+**用途**：为没有 `_original` 配对的独立PDF文件补全元数据
 
 **功能**：
 
-- 扫描和识别孤儿元数据文件
-- 清理无效的元数据记录
-- 修复元数据关联关系
+- 使用视觉语言模型(VLM)智能检测PDF是否为翻译版本
+- 为检测出的翻译文件添加 `translated` 状态元数据
+- 为检测出的未翻译文件添加 `untranslated` 状态元数据
+- 支持多种筛选规则避免重复处理
+
+**检测规则**：
+仅处理没有对应 `_original.pdf` 的独立PDF文件，使用VLM进行左右页面分析：
+- 将PDF页面水平分割为左右两部分
+- 统计左右两侧的中文字符数量
+- **翻译文件判定条件**：右侧中文数 ≥ 左侧中文数 且 左侧非中文数 > 右侧非中文数
+- **未翻译文件判定条件**：不满足上述条件的文件
+
+**跳过规则**：
+- 已有元数据附件的文件
+- `_original.pdf` 备份文件
+- `.mono.pdf`、`.dual.pdf` 等生成文件
+- 有对应 `_original.pdf` 的文件
+- 文件名包含中文的文件
+- 不符合 `Author-YYYY-Title` 格式的文件
+- 超过100MB或500页的文件
+- 包含排除关键词的文件
 
 **使用方法**：
 
@@ -357,37 +375,32 @@ python utils/pdf_orphan_metadata_manager.py
 
 ### 📋 `pdf_pair_metadata_manager.py`
 
-**用途**：配对元数据管理工具，管理原始PDF和翻译PDF的元数据配对
+**用途**：为有 `_original` 配对的已翻译PDF文件补全元数据
 
 **功能**：
 
-- 管理原始PDF和翻译PDF的配对关系
-- 同步元数据信息
-- 批量处理配对操作
+- 为翻译后的PDF文件添加完整的 `translated` 状态元数据
+- 为对应的 `_original.pdf` 文件添加 `untranslated` 状态元数据
+- 在翻译PDF首页添加可点击的原始文件链接标签
+- 嵌入原始PDF作为附件，支持点击打开
+- 自动计算页面间距等合并参数
+
+**处理规则**：
+- 寻找配对的 `X.pdf`（翻译文件）和 `X_original.pdf`（原始文件）
+- 为翻译文件添加包含合并参数的完整元数据
+- 为原始文件添加最小化的未翻译标记
+- 在翻译文件首页添加"打开原始PDF"可点击标签
+- 嵌入原始PDF文件作为附件
+
+**元数据内容**：
+- **翻译文件**：`status: "translated"`、模型名称、运行时间、页面尺寸、间距等
+- **原始文件**：`status: "untranslated"`、运行时间
 
 **使用方法**：
 
 ```bash
 python utils/pdf_pair_metadata_manager.py
 ```
-
-### 🔄 `backfill_pdf2zh_metadata.py`
-
-**用途**：为已翻译但缺少元数据的PDF补齐溯源信息
-
-**功能**：
-
-- 内嵌 `pdf2zh.meta.json` 元数据
-- 将原始PDF作为附件嵌入
-- 在第1页添加可点击的"打开原始PDF"标签
-
-**使用方法**：
-
-```bash
-python utils/backfill_pdf2zh_metadata.py --root /path/to/pdfs --model "Qwen/Qwen3-8B"
-```
-
-
 
 ---
 
