@@ -49,9 +49,6 @@ Thumbs.db
 *.pdf2zh-*.json
 *.pdf2zh-*.tmp
 
-# Config files with sensitive data
-configs/config.json
-
 # Translation output
 *_translated.pdf
 *_translated.json

@@ -51,11 +51,35 @@ def load_configuration() -> Dict[str, Any]:
     except Exception as e:
         raise RuntimeError(f"读取配置文件失败：{e}")
 
+
+def get_config_value(config: Dict[str, Any], config_key: str, env_var: str, default: Optional[str] = None) -> str:
+    """
+    优先从配置文件读取配置值，如果配置值为空字符串则从环境变量读取
+    
+    Args:
+        config: 配置字典
+        config_key: 配置文件中的键名
+        env_var: 环境变量名
+        default: 默认值（可选）
+    
+    Returns:
+        配置值
+    """
+    # 优先从配置文件读取
+    config_value = config.get(config_key, "")
+    
+    # 如果配置值为空字符串，则从环境变量读取
+    if config_value == "":
+        config_value = os.getenv(env_var, default or "")
+    
+    return config_value
+
+
 # ======== 配置参数 ========
 CONFIG = load_configuration()
 
-# VLM API配置 - 优先从环境变量读取
-SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", CONFIG["vlm_api_key"])
+# VLM API配置 - 优先从配置文件读取，如果为空则从环境变量读取
+SILICONFLOW_API_KEY = get_config_value(CONFIG, "vlm_api_key", "SILICONFLOW_API_KEY")
 SILICONFLOW_MODEL   = CONFIG["vlm_model"]
 SILICONFLOW_BASE    = CONFIG["vlm_base"]
 

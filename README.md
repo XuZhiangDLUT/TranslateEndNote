@@ -42,13 +42,15 @@ TranslateEndNote/
 ├── dependencies/
 │   └── requirements.txt         # 📦 Python 依赖清单
 ├── src/
-│   ├── translateEndNote.py      # ⭐ 主程序入口（批处理、合成、元数据与附件）
-│   └── determinePdfChinese.py   # 🔍 VLM 中文检测模块
+│   ├── pdf_batch_translator.py  # ⭐ 主程序入口（批处理、合成、元数据与附件）
+│   └── pdf_language_detector.py  # 🔍 VLM 中文检测模块
 └── utils/
-    ├── backfill_pdf2zh_metadata.py  # 🔄 元数据补齐工具
-    ├── cleanup_sidecar_files.py     # 🧹 临时文件清理工具
-    ├── concatePDF.py                # 🔗 PDF横向拼接工具
-    └── dividePDF.py                 # ✂️ PDF分割工具
+    ├── config_utils.py          # 🔧 配置工具模块
+    ├── pdf_cleanup_tool.py      # 🧹 PDF清理工具
+    ├── pdf_merger.py            # 🔗 PDF合并工具
+    ├── pdf_splitter.py          # ✂️ PDF分割工具
+    ├── pdf_orphan_metadata_manager.py  # 📄 孤儿元数据管理工具
+    └── pdf_pair_metadata_manager.py    # 📋 配对元数据管理工具
 ```
 
 ---
@@ -94,25 +96,33 @@ pip install -r dependencies/requirements.txt
 
 ### 🔑 步骤三：配置 API 密钥
 
+**配置优先级**：系统会优先从配置文件读取，如果配置值为空字符串则从环境变量读取。
+
 **推荐使用环境变量**：
 
 ```bash
 # macOS / Linux
 export SILICONFLOW_API_KEY="your_api_key_here"
+export VLM_API_KEY="your_vlm_api_key_here"
 
 # Windows PowerShell
 setx SILICONFLOW_API_KEY "your_api_key_here"
+setx VLM_API_KEY "your_vlm_api_key_here"
 ```
 
 **或在配置文件中设置**：
 
 ```json
 {
-  "siliconflow_api_key": "your_api_key_here"
+  "siliconflow_api_key": "your_api_key_here",
+  "vlm_api_key": "your_vlm_api_key_here"
 }
 ```
 
-> 💡 **免费通道**：本项目也支持 `pdf2zh` 的免费翻译通道
+> 💡 **配置说明**：
+> - 如果配置文件中的值为空字符串，系统会自动从对应的环境变量读取
+> - 支持的环境变量：`SILICONFLOW_API_KEY`、`VLM_API_KEY`
+> - **免费通道**：本项目也支持 `pdf2zh` 的免费翻译通道
 
 ### ⚙️ 步骤四：配置文件设置
 
@@ -140,7 +150,7 @@ setx SILICONFLOW_API_KEY "your_api_key_here"
 
 ```bash
 # 启动批量翻译
-python src/translateEndNote.py
+python src/pdf_batch_translator.py
 ```
 
 **输出信息**：
@@ -151,7 +161,7 @@ python src/translateEndNote.py
 
 ---
 
-## 🔧 `translateEndNote.py` 详解（最重要）
+## 🔧 `pdf_batch_translator.py` 详解（最重要）
 
 ### 整体流程
 
@@ -231,7 +241,7 @@ python src/translateEndNote.py
 
 ## 🧠 VLM 中文检测模块
 
-### 🔍 `determinePdfChinese.py`
+### 🔍 `pdf_language_detector.py`
 
 使用视觉语言模型(VLM)智能检测PDF文件的主要语言。
 
@@ -264,6 +274,103 @@ python src/translateEndNote.py
 
 ## 🛠️ 实用工具脚本
 
+### 🔧 `config_utils.py`
+
+**用途**：配置工具模块，提供配置读取功能
+
+**功能**：
+
+- 优先从配置文件读取配置值
+- 如果配置值为空字符串则从环境变量读取
+- 支持多种配置项的环境变量映射
+
+**配置优先级**：
+
+1. 配置文件中的值
+2. 环境变量（当配置文件值为空字符串时）
+3. 默认值
+
+### 🧹 `pdf_cleanup_tool.py`
+
+**用途**：PDF清理工具，清理临时和旁路文件
+
+**功能**：
+
+- 清理 `*.pdf2zh-updated.pdf` 文件
+- 清理 `*.pdf2zh-merged.pdf` 文件
+- 清理其他临时文件
+- 释放存储空间
+
+**使用方法**：
+
+```bash
+python utils/pdf_cleanup_tool.py /path/to/pdfs
+```
+
+### 🔗 `pdf_merger.py`
+
+**用途**：PDF合并工具，将多个PDF文件合并为一个
+
+**功能**：
+
+- 支持批量PDF文件合并
+- 保持原有页面顺序
+- 支持输出到指定目录
+
+**使用方法**：
+
+```bash
+python utils/pdf_merger.py
+```
+
+### ✂️ `pdf_splitter.py`
+
+**用途**：PDF分割工具，将大PDF文件分割为小文件
+
+**功能**：
+
+- 按页数分割PDF文件
+- 保持原有页面质量
+- 支持输出到指定目录
+
+**使用方法**：
+
+```bash
+python utils/pdf_splitter.py
+```
+
+### 📄 `pdf_orphan_metadata_manager.py`
+
+**用途**：孤儿元数据管理工具，处理缺少对应PDF的元数据
+
+**功能**：
+
+- 扫描和识别孤儿元数据文件
+- 清理无效的元数据记录
+- 修复元数据关联关系
+
+**使用方法**：
+
+```bash
+python utils/pdf_orphan_metadata_manager.py
+```
+
+### 📋 `pdf_pair_metadata_manager.py`
+
+**用途**：配对元数据管理工具，管理原始PDF和翻译PDF的元数据配对
+
+**功能**：
+
+- 管理原始PDF和翻译PDF的配对关系
+- 同步元数据信息
+- 批量处理配对操作
+
+**使用方法**：
+
+```bash
+python utils/pdf_pair_metadata_manager.py
+```
+
 ### 🔄 `backfill_pdf2zh_metadata.py`
 
 **用途**：为已翻译但缺少元数据的PDF补齐溯源信息
@@ -280,69 +387,7 @@ python src/translateEndNote.py
 python utils/backfill_pdf2zh_metadata.py --root /path/to/pdfs --model "Qwen/Qwen3-8B"
 ```
 
-### 🧹 `cleanup_sidecar_files.py`
 
-**用途**：清理临时和旁路文件，释放存储空间
-
-**清理模式**：
-
-- `*.pdf2zh-updated.pdf`
-- `*.pdf2zh-merged.pdf`
-- 其他临时文件
-
-**使用方法**：
-
-```bash
-python utils/cleanup_sidecar_files.py /path/to/pdfs
-```
-
-### 🔗 `concatePDF.py`
-
-**用途**：将两个页数相同的PDF进行横向拼接，保留左侧PDF的所有批注、高亮和链接
-
-**功能**：
-
-- 支持本地文件和URL路径
-- 完整保留左侧PDF的批注和链接
-- 可配置中缝间距
-- 自动输出到指定目录
-
-**使用方法**：
-
-```bash
-python utils/concatePDF.py
-```
-
-**配置参数**：
-
-- `LEFT_PDF`: 左侧PDF文件路径
-- `RIGHT_PDF`: 右侧PDF文件路径  
-- `OUTPUT_DIR`: 输出目录
-- `OUTPUT_SUFFIX`: 输出文件名后缀
-- `GAP`: 中缝间距（点）
-
-### ✂️ `dividePDF.py`
-
-**用途**：从横向拼接的PDF中恢复左半部分，保留所有批注、高亮和链接
-
-**功能**：
-
-- 支持本地文件和URL路径
-- 将页面宽度裁剪为原宽度的一半
-- 完整保留左侧批注和链接
-- 自动输出到指定目录
-
-**使用方法**：
-
-```bash
-python utils/dividePDF.py
-```
-
-**配置参数**：
-
-- `MERGED_PDF`: 待处理的拼接PDF文件路径
-- `OUTPUT_DIR`: 输出目录
-- `OUTPUT_SUFFIX`: 输出文件名后缀
 
 ---
 
