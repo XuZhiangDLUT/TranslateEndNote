@@ -24,7 +24,7 @@
   "suppress_skipped_output_comment": "是否抑制跳过状态的打印输出",
   
   "file_paths_comment": "文件路径配置",
-  "pdf_root": "D:\\User_Files\\My EndNote Library.Data\\PDF\\2104578526",
+  "pdf_root": "D:\\User_Files\\My EndNote Library.Data\\PDF\\4131471000",
   "pdf_root_comment": "PDF文件根目录路径",
   "pdf2zh_exe": "D:\\Python_Projects\\TranslateEndNote\\pdf2zh\\pdf2zh.exe",
   "pdf2zh_exe_comment": "pdf2zh可执行文件路径",

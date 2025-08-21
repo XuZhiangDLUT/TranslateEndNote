@@ -187,9 +187,11 @@ def embed_metadata_attachment(pdf_path: Path, metadata: Dict[str, Any]) -> Tuple
             doc.embfile_add("pdf2zh.meta.json", payload, desc="PDF2ZH metadata")
             
             # 设置AF关系（Associated Files）
+            # 注意：'af' 键在某些PDF版本或PyMuPDF版本中可能不支持
             try:
                 doc.set_metadata({"af": ["pdf2zh.meta.json"]})
-            except Exception:
+            except Exception as af_error:
+                # AF关系设置失败不影响主要功能，仅记录警告
                 pass
             
             # 保存修改

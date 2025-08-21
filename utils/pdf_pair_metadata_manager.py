@@ -93,9 +93,11 @@ def ensure_meta_on_original(original_pdf: Path, dry=False):
         # 文档级嵌入（微型 JSON）
         doc.embfile_add("pdf2zh.meta.json", payload, desc="PDF2ZH metadata")
         # （尽力而为）声明 AF 关系
+        # 注意：'af' 键在某些PDF版本或PyMuPDF版本中可能不支持
         try:
             doc.set_metadata({"af": ["pdf2zh.meta.json"]})
-        except Exception:
+        except Exception as af_error:
+            # AF关系设置失败不影响主要功能，仅记录警告
             pass
         _safe_save_in_place(doc, original_pdf)
 

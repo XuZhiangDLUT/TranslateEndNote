@@ -479,7 +479,7 @@ def execute_pdf2zh_translation(input_pdf: Path, output_dir: Path, enable_ocr: bo
         if ok:
             temp_output = find_most_recent_matching_file(str(output_dir / f"{temp_input.stem}*mono.pdf"))
             if temp_output and temp_output.exists():
-                final_output = expected_mono_path(input_pdf)
+                final_output = get_expected_mono_output_path(input_pdf)
                 try:
                     temp_output.rename(final_output)
                 except Exception as e:
@@ -576,9 +576,11 @@ def embed_minimal_metadata(pdf_path: Path):
             doc.embfile_add(meta_name, meta_content, desc="PDF2ZH metadata")
 
             # 设置AF关系（Associated Files）
+            # 注意：'af' 键在某些PDF版本或PyMuPDF版本中可能不支持
             try:
                 doc.set_metadata({"af": [meta_name]})
-            except Exception:
+            except Exception as af_error:
+                # AF关系设置失败不影响主要功能，仅记录警告
                 pass
 
             # 保存修改
@@ -635,7 +637,8 @@ def embed_original_file_attachment(pdf_path: Path, original_pdf: Path, metadata:
             af_list = [meta_name]
             try:
                 doc.set_metadata({"af": af_list})
-            except Exception:
+            except Exception as af_error:
+                # AF关系设置失败不影响主要功能，仅记录警告
                 pass
 
             # 保存修改
@@ -700,7 +703,7 @@ def merge_pdfs_preserve_annotations(pdf_left: Path, pdf_right: Path, output_path
 
         # 鲁棒的临时文件处理
         temp_uuid = uuid.uuid4().hex[:8]
-        tmp_path = overwrite_path.parent / f"{overwrite_path.stem}_tmp_{temp_uuid}.pdf"
+        tmp_path = output_path.parent / f"{output_path.stem}_tmp_{temp_uuid}.pdf"
         out.save(str(tmp_path), garbage=4, deflate=True)
     finally:
         # 确保所有文档句柄关闭
@@ -718,9 +721,9 @@ def merge_pdfs_preserve_annotations(pdf_left: Path, pdf_right: Path, output_path
             pass
 
     # 原子替换（带重试）
-    if not _atomic_replace_with_retry(tmp_path, overwrite_path):
+    if not _atomic_replace_with_retry(tmp_path, output_path):
         # 替换失败，退避到旁路文件
-        sidecar_path = overwrite_path.parent / f"{overwrite_path.stem}.pdf2zh-merged.pdf"
+        sidecar_path = output_path.parent / f"{output_path.stem}.pdf2zh-merged.pdf"
         print(f"  警告：目标文件被占用，已保存到旁路文件：{sidecar_path.name}", flush=True)
         _atomic_replace_with_retry(tmp_path, sidecar_path)
 
