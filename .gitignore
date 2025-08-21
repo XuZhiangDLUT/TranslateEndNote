@@ -23,6 +23,7 @@ wheels/
 /src/__pycache__
 /.claude
 /.__pycache__
+/utils/__pycache__
 
 # Virtual Environment
 venv/
