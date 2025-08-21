@@ -24,7 +24,6 @@ wheels/
 /.claude
 /.__pycache__
 /utils/__pycache__
-/webui/__pycache__
 
 # Virtual Environment
 venv/
