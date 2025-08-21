@@ -24,6 +24,7 @@ wheels/
 /.claude
 /.__pycache__
 /utils/__pycache__
+/webui/__pycache__
 
 # Virtual Environment
 venv/
@@ -59,3 +60,6 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+
+# pdf2zh executable (will be managed separately)
+pdf2zh/

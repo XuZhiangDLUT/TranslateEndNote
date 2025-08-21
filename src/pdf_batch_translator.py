@@ -260,7 +260,7 @@ def should_exclude_from_processing(pdf_path: Path, exclusion_keywords: List[str]
             return True, f"already_translated_by_metadata:{metadata_info}"
 
     # 检查排除关键词
-    if SKIP_CONTAINS_SKIP_KEYWORDS and contains_exclusion_keywords(pdf_path.name, skip_keywords):
+    if SKIP_CONTAINS_SKIP_KEYWORDS and contains_exclusion_keywords(pdf_path.name, exclusion_keywords):
         return True, "contains_exclusion_keywords"
 
     # 检查是否已存在备份
@@ -477,7 +477,7 @@ def execute_pdf2zh_translation(input_pdf: Path, output_dir: Path, enable_ocr: bo
 
     if temp_input:
         if ok:
-            temp_output = find_best_match(str(output_dir / f"{temp_input.stem}*mono.pdf"))
+            temp_output = find_most_recent_matching_file(str(output_dir / f"{temp_input.stem}*mono.pdf"))
             if temp_output and temp_output.exists():
                 final_output = expected_mono_path(input_pdf)
                 try:

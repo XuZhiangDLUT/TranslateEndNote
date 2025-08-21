@@ -24,11 +24,11 @@
   "suppress_skipped_output_comment": "是否抑制跳过状态的打印输出",
   
   "file_paths_comment": "文件路径配置",
-  "pdf_root": "D:\\User_Files\\My EndNote Library.Data\\PDF",
+  "pdf_root": "D:\\User_Files\\My EndNote Library.Data\\PDF\\2104578526",
   "pdf_root_comment": "PDF文件根目录路径",
-  "pdf2zh_exe": "D:\\Downloads\\pdf2zh-v2.4.3-BabelDOC-v0.4.22-win64(1)\\pdf2zh\\pdf2zh.exe",
+  "pdf2zh_exe": "D:\\Python_Projects\\TranslateEndNote\\pdf2zh\\pdf2zh.exe",
   "pdf2zh_exe_comment": "pdf2zh可执行文件路径",
-  "log_dir": "D:\\Downloads",
+  "log_dir": "D:\\Downloads\\新建文件夹 (71)",
   "log_dir_comment": "日志文件的保存目录，如果为空则日志保存在PDF_ROOT中",
   
   "translation_comment": "翻译配置",
@@ -81,6 +81,7 @@
     "clean",
     "supplement",
     "pdf2zh-updated",
-    "pdf2zh-merged"
+    "pdf2zh-merged",
+    "__temp"
   ]
 }

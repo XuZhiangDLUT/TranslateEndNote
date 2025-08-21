@@ -6,6 +6,7 @@ PDF批处理工具 - 清理旁路文件
 功能：
 - 扫描指定目录下的旁路文件
 - 删除 .pdf2zh-updated.pdf 和 .pdf2zh-merged.pdf 文件
+- 删除 pdf_batch_translator.py 生成的临时输入文件 (__temp_input_*.pdf)
 - 统计删除的文件数量和释放的存储空间
 """
 
@@ -32,7 +33,11 @@ def cleanup_sidecar_files(root_path=None):
     print(f"正在扫描 {root_path}...")
     
     # 定义要删除的文件模式
-    patterns = ["*.pdf2zh-updated.pdf", "*.pdf2zh-merged.pdf"]
+    patterns = [
+        "*.pdf2zh-updated.pdf", 
+        "*.pdf2zh-merged.pdf",
+        "__temp_input_*.pdf"
+    ]
     
     for pattern in patterns:
         for file_path in root_path.rglob(pattern):
