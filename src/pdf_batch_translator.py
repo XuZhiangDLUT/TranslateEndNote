@@ -116,6 +116,7 @@ SILICONFLOW_BASE = CONFIG["siliconflow_base"]
 # ========== 处理参数配置 ==========
 QPS_LIMIT = CONFIG["qps_limit"]
 GAP = CONFIG["gap"]
+VERTICAL_EXPANSION = CONFIG["vertical_expansion"]
 MAX_SIZE_BYTES = CONFIG["max_size_bytes"]
 MAX_PAGES = CONFIG["max_pages"]
 MAX_TIME = CONFIG["max_time"]
@@ -679,7 +680,7 @@ def _retry_unlink(path: Path, max_retries=5, initial_delay=0.05):
 
 
 def merge_pdfs_preserve_annotations(pdf_left: Path, pdf_right: Path, output_path: Path,
-                                        gap: float = 0.0):
+                                        gap: float = 0.0, vertical_expansion: float = 0.0):
     left_doc = fitz.open(pdf_left)
     right_doc = fitz.open(pdf_right)
     out = fitz.open()
@@ -694,11 +695,22 @@ def merge_pdfs_preserve_annotations(pdf_left: Path, pdf_right: Path, output_path
         for i in range(total):
             page = out[i]
             lw, lh = page.rect.width, page.rect.height
+            
+            # 计算新的页面尺寸（支持垂直拓展）
             new_w = 2 * lw + gap
-            new_rect = fitz.Rect(0, 0, new_w, lh)
+            new_h = lh + vertical_expansion
+            new_rect = fitz.Rect(0, 0, new_w, new_h)
             _set_all_page_boxes(page, new_rect)
 
-            right_target = fitz.Rect(lw + gap, 0, 2 * lw + gap, lh)
+            # 计算右侧目标位置（考虑垂直拓展时的垂直居中）
+            if vertical_expansion > 0:
+                # 垂直居中显示
+                vertical_offset = vertical_expansion / 2
+                right_target = fitz.Rect(lw + gap, vertical_offset, 2 * lw + gap, lh + vertical_offset)
+            else:
+                # 原有逻辑，从顶部开始
+                right_target = fitz.Rect(lw + gap, 0, 2 * lw + gap, lh)
+            
             page.show_pdf_page(right_target, right_doc, i)
 
         # 鲁棒的临时文件处理
@@ -903,7 +915,11 @@ def main():
                 print(f"  警告：无法获取原始PDF页面尺寸", flush=True)
                 source_sizes = []
 
-            merge_pdfs_preserve_annotations(pdf_path, mono_path, final_path, gap=GAP)
+            merge_pdfs_preserve_annotations(pdf_path, mono_path, final_path, gap=GAP, vertical_expansion=VERTICAL_EXPANSION)
+
+            # 如果启用了垂直拓展，输出提示信息
+            if VERTICAL_EXPANSION > 0:
+                print(f"  已启用垂直拓展：每页增加 {VERTICAL_EXPANSION}pt 高度以完整显示内容", flush=True)
 
             # 获取合并后PDF页面尺寸
             result_sizes = extract_page_dimensions(final_path)
