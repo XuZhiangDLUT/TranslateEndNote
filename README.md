@@ -44,13 +44,13 @@ TranslateEndNote/
 ├── src/
 │   ├── pdf_batch_translator.py  # ⭐ 主程序入口（批处理、合成、元数据与附件）
 │   └── pdf_language_detector.py  # 🔍 VLM 中文检测模块
-├── utils/
-│   ├── config_utils.py          # 🔧 配置工具模块
-│   ├── pdf_cleanup_tool.py      # 🧹 PDF清理工具
-│   ├── pdf_merger.py            # 🔗 PDF合并工具
-│   ├── pdf_splitter.py          # ✂️ PDF分割工具
-│   ├── pdf_orphan_metadata_manager.py  # 📄 孤儿元数据管理工具
-│   └── pdf_pair_metadata_manager.py    # 📋 配对元数据管理工具
+└── utils/
+    ├── config_utils.py          # 🔧 配置工具模块
+    ├── pdf_cleanup_tool.py      # 🧹 PDF清理工具
+    ├── pdf_merger.py            # 🔗 PDF合并工具
+    ├── pdf_splitter.py          # ✂️ PDF分割工具
+    ├── pdf_orphan_metadata_manager.py  # 📄 一般元数据管理工具
+    └── pdf_pair_metadata_manager.py    # 📋 配对元数据管理工具
 ```
 
 ---
